@@ -1,5 +1,5 @@
 # Flowchart of the Article Recommnder System
-![Flow](flow.png)
+![Flow](flowchart.png)
 
  - We select a set of source websites such as Hackernews, Techcrunch, Wired, Reddit, etc.
  - Run a cron job every 2 hours to scrape the latest articles from these websites.
