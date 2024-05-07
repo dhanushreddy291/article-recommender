@@ -1,4 +1,4 @@
-const { PrismaClient, Prisma } = require('@prisma/client');
+const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient()
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const PDFDocument = require('pdfkit');
@@ -9,10 +9,8 @@ const path = require('path');
 require('dotenv').config()
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const characterCounts = [480, 160, 240, 280, 270];
+const characterCounts = [420, 160, 240, 280, 260];
 const indexesOfCharacterCountsBySortedOrder = [4, 0, 1, 2, 3];
-
-const getRandomElement = (myArray) => myArray[~~(Math.random() * myArray.length)];
 
 const downloadImages = async (imageLinks) => {
     let downloaded_images = [];
@@ -231,31 +229,6 @@ const createMagazineCover = async (bgImage, userName, images, articleText) => {
     doc.end()
 }
 
-const validSummary = async (summary) => {
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
-
-    const chat = model.startChat({
-        history: [
-            {
-                role: "user",
-                parts: [{ text: "I will be sending you a text, which is a summary of a website, which has been written by my friend. You need to check if its a valid summary or not. He may have written that website is not working, offline, or any error that website may have shown to him, when he visited the website. Those cases they are invalid summaries as we need to redo them again. You need to return either 1 or 0 thats it, dont return anything at all, because I need to parse your output as integer, so even if it contains any non integer character my whole production app will collapse just because of you, so be carfeul. Just return 1 if valid, 0 if invalid" }],
-            },
-            {
-                role: "model",
-                parts: [{ text: "Sure, I will do that." }],
-            },
-        ],
-        generationConfig: {
-            maxOutputTokens: 10,
-        },
-    });
-
-    const result = await chat.sendMessage(summary);
-    const response = await result.response;
-    const text = response.text();
-    return text;
-}
-
 const shortenTheTitle = async (title) => {
     const model = genAI.getGenerativeModel({ model: "gemini-pro" });
 
@@ -276,7 +249,7 @@ const shortenTheTitle = async (title) => {
     });
 
     const result = await chat.sendMessage(title);
-    const response = await result.response;
+    const response = result.response;
     const text = response.text();
     return text;
 }
@@ -313,29 +286,26 @@ const getImageLinksFromMarkdownText = (markdownText) => {
     return imageLinksArray;
 }
 
-// Get 50 articles from the database, for these columns: id, title, link, summary_jina, raw_jina_text, created_at
 const getAllArticles = async () => {
     await prisma.$connect();
-    const articles = await prisma.articles.findMany({
+    const articles = await prisma.newsletter.findMany({
         select: {
             id: true,
             title: true,
             link: true,
-            summary_jina: true,
-            raw_jina_text: true,
-            created_at: true
+            summary: true,
+            updated_at: true,
         },
         where: {
-            ai: 2,
-            summary_jina: {
+            predicted_value: 3,
+            summary: {
                 not: null
             }
         },
         orderBy: {
             created_at: 'desc'
         },
-        take: 10,
-        skip: 9
+        take: 5
     });
 
 
@@ -359,6 +329,32 @@ function sortArrays(arr1, arr2) {
 
 const getImageLinkFromUnsplash = async (searchQuery) => {
     try {
+
+        // First make a request to gemini to ask what to search for on unsplash
+        const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+
+        const chat = model.startChat({
+            history: [
+                {
+                    role: "user",
+                    parts: [{ text: "I will be sending you a title of a blog post, you need to tell me what to search for on unsplash to get an image for this title. Don't send anything extra" }],
+                },
+                {
+                    role: "model",
+                    parts: [{ text: "Sure, I will do that." }],
+                },
+            ],
+            generationConfig: {
+                maxOutputTokens: 50,
+            },
+        });
+
+        const result = await chat.sendMessage(searchQuery);
+        const geminiResponse = result.response;
+        const text = geminiResponse.text();
+
+        searchQuery = text;
+
         const response = await fetch(`https://api.unsplash.com/photos/random?query=${searchQuery}&client_id=${process.env.UNSPLASH_ACCESS_KEY}`);
         const data = await response.json();
         return data.urls.regular;
@@ -377,15 +373,10 @@ const main = async () => {
 
     for (let i = 0; i < articles.length; i++) {
         const article = articles[i];
-        const summary = article.summary_jina;
-        const isValid = await validSummary(summary);
-
-        console.log(`Article ${article.title} is ${isValid === "1" ? "valid" : "invalid"}`);
-
-        if (isValid === "1" && titles.length < 5) {
-            titles.push(article.title);
-            contents.push(article.summary_jina);
-        }
+        const title = article.title;
+        const summary = article.summary;
+        titles.push(title);
+        contents.push(summary);
     }
 
     console.log(titles);
