@@ -6,11 +6,34 @@ const fs = require('fs');
 const sharp = require('sharp');
 const crypto = require('crypto');
 const path = require('path');
+const doc = require('pdfkit');
 require('dotenv').config()
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const characterCounts = [420, 160, 240, 280, 260];
 const indexesOfCharacterCountsBySortedOrder = [4, 0, 1, 2, 3];
+const headerText = "WHAT'S TRENDING NOW";
+const mainTitle = 'AI SPICE';
+const headerFontSize = 13;
+const mainTitleFontSize = 90;
+const subtitleFontSize = 16;
+const dateFontSize = 14;
+const titleFontSize = 22;
+const contentFontSize = 14;
+const headerPosY = 100;
+const mainTitlePosY = 110;
+const subtitlePosY = 205
+const title1PosY = 300;
+const title2PosY = 600;
+const title3PosY = 100;
+const title4PosY = 320;
+const title5PosY = 570;
+// Current date as dd Month Name year
+const dateText = new Date().toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
+});
 
 const downloadImages = async (imageLinks) => {
     let downloaded_images = [];
@@ -76,41 +99,9 @@ const setBackground = async (doc, bgImage) => {
     doc.image(bgImage, x, y, { width: docWidth, height: docHeight });
 }
 
-const createMagazineCover = async (bgImage, userName, images, articleText) => {
-    const doc = new PDFDocument({
-        size: 'A4',
-        margin: 50
-    });
-    doc.pipe(fs.createWriteStream('newsletter.pdf'));
+const makeIntroPage = async (doc, bgImage, userName, images, titles, contents, links) => {
+
     await setBackground(doc, bgImage);
-
-    const headerText = "WHAT'S TRENDING NOW";
-    const mainTitle = 'AI SPICE';
-    const subtitle = `just for you @${userName}`;
-    // Current date as dd Month Name year
-    const dateText = new Date().toLocaleDateString('en-GB', {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric'
-    });
-
-    const { titles, contents, links } = articleText;
-
-    const headerFontSize = 13;
-    const mainTitleFontSize = 90;
-    const subtitleFontSize = 16;
-    const dateFontSize = 14;
-    const titleFontSize = 22;
-    const contentFontSize = 14;
-
-    const headerPosY = 100;
-    const mainTitlePosY = 110;
-    const subtitlePosY = 205
-    const title1PosY = 300;
-    const title2PosY = 600;
-    const title3PosY = 100;
-    const title4PosY = 320;
-    const title5PosY = 570;
 
     // Set font color to white
     doc.fillColor('black');
@@ -170,8 +161,9 @@ const createMagazineCover = async (bgImage, userName, images, articleText) => {
         .fillColor('#39A7FF')
         .fontSize(contentFontSize)
         .text(contents[1], doc.page.width - 245, title2PosY + 30, { align: 'left', width: doc.page.width - 395 })
+}
 
-    // Page 2
+const makeEvenPages = async (doc, bgImage, images, pdfPageNumber, titles, contents, links) => {
     doc.addPage();
 
     await setBackground(doc, bgImage);
@@ -184,47 +176,63 @@ const createMagazineCover = async (bgImage, userName, images, articleText) => {
         .font(fonts.PatrickHand)
         .text(dateText, 0, headerPosY - 40, { align: 'right' });
 
-    doc.image(images[2], 60, title3PosY, { align: 'left', width: 240, height: 200 });
+    doc.image(images[(pdfPageNumber - 2) * 3 + 2], 60, title3PosY, { align: 'left', width: 240, height: 200 });
 
     // Add the titles[2] to right
     doc.font(fonts.BebasNeue)
         .fontSize(titleFontSize)
-        .text(titles[2], doc.page.width - 270, title3PosY, { align: 'left', width: doc.page.width, link: links[2] })
+        .text(titles[(pdfPageNumber - 2) * 3 + 2], doc.page.width - 270, title3PosY, { align: 'left', width: doc.page.width, link: links[(pdfPageNumber - 2) * 3 + 2] })
 
     // Add the contents[2] below titles[2]
     doc.font(fonts.MPlus1Code)
         .fillColor('#39A7FF')
         .fontSize(contentFontSize)
-        .text(contents[2], doc.page.width - 270, title3PosY + 30, { align: 'left', width: doc.page.width - 360 })
+        .text(contents[(pdfPageNumber - 2) * 3 + 2], doc.page.width - 270, title3PosY + 30, { align: 'left', width: doc.page.width - 360 })
 
     // For 2nd post add image below post 1
-    doc.image(images[3], doc.page.width - 270, title4PosY, { align: 'left', width: doc.page.width - 370, height: 230 });
+    doc.image(images[(pdfPageNumber - 2) * 3 + 3], doc.page.width - 270, title4PosY, { align: 'left', width: doc.page.width - 370, height: 230 });
 
     // Add the titles[3] to the right of the image
     doc.fillColor('black')
         .font(fonts.BebasNeue)
         .fontSize(titleFontSize)
-        .text(titles[3], 60, title4PosY, { align: 'left', width: doc.page.width - 340, link: links[3] })
+        .text(titles[(pdfPageNumber - 2) * 3 + 3], 60, title4PosY, { align: 'left', width: doc.page.width - 340, link: links[(pdfPageNumber - 2) * 3 + 2] })
 
     // Add the contents[3] below titles[3]
     doc.font(fonts.MPlus1Code)
         .fillColor('#39A7FF')
         .fontSize(contentFontSize)
-        .text(contents[3], 60, title4PosY + 30, { align: 'left', width: doc.page.width - 340 })
+        .text(contents[(pdfPageNumber - 2) * 3 + 3], 60, title4PosY + 30, { align: 'left', width: doc.page.width - 340 })
 
-    doc.image(images[4], 60, title5PosY, { align: 'left', width: 240, height: 220 });
+    doc.image(images[(pdfPageNumber - 2) * 3 + 4], 60, title5PosY, { align: 'left', width: 240, height: 220 });
 
     // Add the titles[4] at right
     doc.font(fonts.BebasNeue)
         .fillColor('black')
         .fontSize(titleFontSize)
-        .text(titles[4], doc.page.width - 270, title5PosY, { align: 'left', width: doc.page.width, link: links[4] });
+        .text(titles[(pdfPageNumber - 2) * 3 + 4], doc.page.width - 270, title5PosY, { align: 'left', width: doc.page.width, link: links[(pdfPageNumber - 2) * 3 + 2] });
 
     // Add the contents[4] below titles[4]
     doc.font(fonts.MPlus1Code)
         .fillColor('#39A7FF')
         .fontSize(contentFontSize)
-        .text(contents[4], doc.page.width - 270, title5PosY + 30, { align: 'left', width: doc.page.width - 360 })
+        .text(contents[(pdfPageNumber - 2) * 3 + 4], doc.page.width - 270, title5PosY + 30, { align: 'left', width: doc.page.width - 360 })
+}
+
+const createMagazineCover = async (bgImage, userName, images, articleText) => {
+    const doc = new PDFDocument({
+        size: 'A4',
+        margin: 50
+    });
+    doc.pipe(fs.createWriteStream('newsletter.pdf'));
+
+    const { titles, contents, links } = articleText;
+
+    // Page 1
+    await makeIntroPage(doc, bgImage, userName, images, titles, contents, links);
+
+    // Page 2
+    await makeEvenPages(doc, bgImage, images, 2, titles, contents, links);
 
     doc.end()
 }
@@ -297,14 +305,21 @@ const getAllArticles = async () => {
             updated_at: true,
         },
         where: {
-            predicted_value: 3,
+            predicted_value: {
+                gte: 2
+            },
             summary: {
                 not: null
             }
         },
-        orderBy: {
-            created_at: 'desc'
-        },
+        orderBy: [
+            {
+                predicted_value: 'desc'
+            },
+            {
+                created_at: 'desc'
+            }
+        ],
         take: 5
     });
 
